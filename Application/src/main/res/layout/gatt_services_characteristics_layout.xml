@@ -1,0 +1,93 @@
+<?xml version="1.0" encoding="utf-8"?>
+<RelativeLayout
+        xmlns:android="http://schemas.android.com/apk/res/android"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+    android:background="@drawable/wall">
+
+
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:textAppearance="?android:attr/textAppearanceLarge"
+        android:text="10:10"
+        style="@style/MyTextViewStyleBold"
+        android:id="@+id/clock_text"
+        android:textSize="60sp"
+        android:layout_alignParentTop="true"
+        android:layout_alignParentEnd="true"
+
+        />
+
+
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:textAppearance="?android:attr/textAppearanceMedium"
+        android:text="Sat,May 16"
+        android:textSize="30sp"
+        style="@style/MyTextViewStyle"
+        android:id="@+id/date_text"
+        android:layout_below="@+id/clock_text"
+        android:layout_alignParentEnd="true" />
+
+    <LinearLayout
+        android:orientation="vertical"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:layout_below="@+id/date_text"
+        android:layout_toStartOf="@+id/clock_text"
+        android:layout_alignParentEnd="true"
+        android:layout_alignParentStart="true"
+        android:weightSum="1"
+        android:gravity="center_vertical">
+
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:textAppearance="?android:attr/textAppearanceLarge"
+            android:text="BLE T/H SENSOR"
+            android:textColor="#fff6cc26"
+            android:textStyle="bold"
+            android:textSize="50sp"
+            android:id="@+id/appname_text"
+            android:layout_gravity="center_horizontal" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:textAppearance="?android:attr/textAppearanceMedium"
+            android:text="10C"
+            android:layout_marginTop="40dp"
+            style="@style/MyTextViewStyleBold"
+            android:textSize="90sp"
+            android:id="@+id/celcius_text"
+            android:layout_gravity="center_horizontal" />
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:textAppearance="?android:attr/textAppearanceSmall"
+            android:text="70F"
+            android:textSize="70sp"
+            style="@style/MyTextViewStyleBold"
+            android:id="@+id/fara_text"
+            android:layout_gravity="center_horizontal" />
+    </LinearLayout>
+
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:textAppearance="?android:attr/textAppearanceSmall"
+        android:text="HUMIDITY: 60%"
+        android:id="@+id/humidity_text"
+        style="@style/MyTextViewStyle"
+        android:textSize="50sp"
+        android:layout_gravity="center_horizontal"
+        android:layout_alignParentBottom="true"
+        android:layout_alignParentEnd="true"
+        android:layout_alignParentStart="true"
+        android:gravity="center" />
+
+
+</RelativeLayout>
