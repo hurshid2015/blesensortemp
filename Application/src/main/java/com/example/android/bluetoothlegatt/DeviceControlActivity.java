@@ -31,6 +31,11 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
 import android.content.ServiceConnection;
+import android.graphics.Bitmap;
+import android.graphics.BitmapFactory;
+import android.net.ConnectivityManager;
+import android.net.NetworkInfo;
+import android.os.AsyncTask;
 import android.os.Bundle;
 import android.os.Environment;
 import android.os.Handler;
@@ -43,6 +48,8 @@ import android.view.View;
 import android.view.Window;
 import android.widget.Button;
 import android.widget.EditText;
+import android.widget.ImageView;
+import android.widget.LinearLayout;
 import android.widget.TextView;
 
 import java.io.File;
@@ -60,6 +67,10 @@ import java.util.UUID;
 
 import android.widget.SeekBar;
 import android.widget.Toast;
+
+import com.example.android.bluetoothlegatt.model.Weather;
+
+import org.json.JSONException;
 
 /**
  * For a given BLE device, this Activity provides the user interface to connect, display data,
@@ -82,6 +93,21 @@ public class DeviceControlActivity extends Activity {
     SimpleDateFormat sdf;
 
 
+    private TextView cityText;
+    private TextView condDescr;
+    private TextView temp2;
+    private TextView press;
+    private TextView fara2_text;
+    private TextView windSpeed;
+    private TextView windDeg;
+    private boolean flag=true;
+    private LinearLayout ll;
+    int count=0;
+
+    private TextView hum;
+    private ImageView imgView;
+
+
     FileWriter writer;
 
 
@@ -97,6 +123,11 @@ public class DeviceControlActivity extends Activity {
     private EditText mEditText;
     private TextView celcius_text;
     private TextView fara_text;
+    private JSONWeatherTask task;
+
+    String city = "Torino,IT";
+    //private JSONWeatherTask task;
+
     float temp=0;
     float humid=0;
     private TextView date_text;
@@ -186,6 +217,7 @@ public class DeviceControlActivity extends Activity {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.gatt_services_characteristics_layout);
 
+
         final Intent intent = getIntent();
         mDeviceName = intent.getStringExtra(EXTRAS_DEVICE_NAME);
         mDeviceAddress = intent.getStringExtra(EXTRAS_DEVICE_ADDRESS);
@@ -218,6 +250,7 @@ public class DeviceControlActivity extends Activity {
         humid_text = (TextView) findViewById(R.id.humidity_text);
         clock_text = (TextView) findViewById(R.id.clock_text);
         fara_text = (TextView) findViewById(R.id.fara_text);
+
         date_text = (TextView) findViewById(R.id.date_text);
 
 
@@ -234,6 +267,16 @@ public class DeviceControlActivity extends Activity {
 
 
         updateTimeThread();
+
+
+        cityText = (TextView) findViewById(R.id.cityText);
+        temp2 = (TextView) findViewById(R.id.celcius2_text);
+        hum = (TextView) findViewById(R.id.humidity2_text);
+        fara2_text = (TextView) findViewById(R.id.fara2_text);
+
+
+
+        //task.execute(new String[]{city});
     }
 
     private void writeCsvHeader(String h1, String h2, String h3) throws IOException {
@@ -280,6 +323,9 @@ public class DeviceControlActivity extends Activity {
             Log.d(TAG, "Connect request result=" + result);
         }
 
+        JSONWeatherTask task;
+        task = new JSONWeatherTask();
+        task.execute(new String[]{city});
 
     }
 
@@ -287,6 +333,8 @@ public class DeviceControlActivity extends Activity {
     protected void onPause() {
         super.onPause();
         unregisterReceiver(mGattUpdateReceiver);
+        //task.cancel(true);
+        flag=false;
         stoptimertask();
     }
 
@@ -301,6 +349,8 @@ public class DeviceControlActivity extends Activity {
         } catch (IOException e) {
             e.printStackTrace();
         }
+        flag=false;
+        //task.cancel(true);
     }
 
 
@@ -554,4 +604,79 @@ public class DeviceControlActivity extends Activity {
 
 
 
+
+    private class JSONWeatherTask extends AsyncTask<String, Weather, Weather> {
+
+        @Override
+        protected Weather doInBackground(String... params) {
+            Weather weather = new Weather();
+            flag=true;
+            while(flag==true && !isCancelled() ) {
+
+                while(isNetworkAvailable()==true&&flag==true && !isCancelled()) {
+
+                    String data = ((new WeatherHttpClient()).getWeatherData(params[0]));
+                    try {
+                        weather = JSONWeatherParser.getWeather(data);
+
+                        // Let's retrieve the icon
+                        weather.iconData = ((new WeatherHttpClient()).getImage(weather.currentCondition.getIcon()));
+
+                    } catch (JSONException e) {
+                        e.printStackTrace();
+                    }
+                    publishProgress(weather);
+                    //return weather;
+                    try {
+                        Thread.sleep(10000);
+                    } catch (InterruptedException e) {
+                        e.printStackTrace();
+                    }
+                }
+            }
+            return weather;
+        }
+
+
+        @Override
+        protected void onProgressUpdate(Weather... weather2)
+        {
+            super.onProgressUpdate(weather2);
+            Weather weather = weather2[0];
+
+            if (weather.iconData != null && weather.iconData.length > 0) {
+                //Bitmap img = BitmapFactory.decodeByteArray(weather.iconData, 0, weather.iconData.length);
+                //imgView.setImageBitmap(img);
+            }
+
+             ll = (LinearLayout)findViewById(R.id.internet_data);
+            ll.setVisibility(View.VISIBLE);
+            //cityText.setVisibility(View.VISIBLE);
+            cityText.setText(weather.location.getCity() + "," + weather.location.getCountry());
+
+
+
+
+            temp2.setText("" + Math.round((weather.temperature.getTemp() - 273.15)) +(char) 0x00B0 + "C");
+            float farangeit2 = (Math.round((weather.temperature.getTemp() - 273.15)))*(9/5) + 32;
+            fara2_text.setText(String.format("%.1f\u00B0F", farangeit2));
+            hum.setText("HUMIDITY: " + weather.currentCondition.getHumidity() + "%");
+
+
+            count++;
+            Context context = getApplicationContext();
+            CharSequence text = "Times ";
+            int duration = Toast.LENGTH_LONG;
+            Toast toast = Toast.makeText(context, text+" "+count, duration);
+            //toast.show();
+        }
+    }
+
+
+    private boolean isNetworkAvailable() {
+        ConnectivityManager connectivityManager
+                = (ConnectivityManager) getSystemService(Context.CONNECTIVITY_SERVICE);
+        NetworkInfo activeNetworkInfo = connectivityManager.getActiveNetworkInfo();
+        return activeNetworkInfo != null && activeNetworkInfo.isConnected();
+    }
 }
