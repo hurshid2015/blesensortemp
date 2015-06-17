@@ -165,6 +165,9 @@ public class DeviceControlActivity extends Activity {
             }
             // Automatically connects to the device upon successful start-up initialization.
             mBluetoothLeService.connect(mDeviceAddress);
+            //mBluetoothLeService.connect("54:4A:16:25:8E:76");
+           // mBluetoothLeService.connect("54:4A:16:25:A7:FF");
+            Log.e(TAG, "Unable to initialize Bluetooth");
         }
 
         @Override
@@ -194,6 +197,8 @@ public class DeviceControlActivity extends Activity {
                 clearUI();
             } else if (BluetoothLeService.ACTION_GATT_SERVICES_DISCOVERED.equals(action)) {
                 // Show all the supported services and characteristics on the user interface.
+                Log.d("new",BluetoothLeService.UUID_HM_RX_TX.toString());
+                Log.d("new","service is connected");
                 displayGattServices(mBluetoothLeService.getSupportedGattServices());
             } else if (BluetoothLeService.ACTION_DATA_AVAILABLE.equals(action)) {
                 String sensedData = intent.getStringExtra(mBluetoothLeService.EXTRA_DATA);
@@ -383,7 +388,7 @@ public class DeviceControlActivity extends Activity {
                 h |= dataB[1];    //Add a second byte. Totally 16 bit
                 h &= ~0x3;              //Remove the CRC last two bits
                float RH = Math.round((-6 + (125.0 / 65536.0) * (float) h));//Return the humidity
-                    // float RH = ((-6f) + 125f * ((float)h / 65535f));
+               // float RH = ((-6f) + 125f * ((float)h / 65535f));
                  humid_text.setText("HUMIDITY:" +" "+ String.format("%.0f%%", RH));
                 humid=RH;
 
@@ -628,7 +633,7 @@ public class DeviceControlActivity extends Activity {
                     publishProgress(weather);
                     //return weather;
                     try {
-                        Thread.sleep(10000);
+                        Thread.sleep(5000);
                     } catch (InterruptedException e) {
                         e.printStackTrace();
                     }
@@ -667,7 +672,7 @@ public class DeviceControlActivity extends Activity {
             Context context = getApplicationContext();
             CharSequence text = "Times ";
             int duration = Toast.LENGTH_LONG;
-            Toast toast = Toast.makeText(context, text+" "+count, duration);
+            Toast toast = Toast.makeText(context, text+ " "+count, duration);
             //toast.show();
         }
     }
