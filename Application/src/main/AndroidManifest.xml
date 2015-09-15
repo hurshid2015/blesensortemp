@@ -28,7 +28,7 @@
     devices only.  If you want to make your app available to devices that don't support BLE,
     you should omit this in the manifest.  Instead, determine BLE capability by using
     PackageManager.hasSystemFeature(FEATURE_BLUETOOTH_LE) -->
-    <uses-feature android:name="android.hardware.bluetooth_le" android:required="false"/>
+    <uses-feature android:name="android.hardware.bluetooth_le" android:required="true"/>
 
     <uses-permission android:name="android.permission.BLUETOOTH"/>
     <uses-permission android:name="android.permission.INTERNET"/>
@@ -48,7 +48,7 @@
             </intent-filter>
         </activity>
         <activity android:name=".DeviceControlActivity"/>
-        <service android:name=".BluetoothLeService" android:enabled="true"/>
+        <service android:name=".WeatherHttpClient$BluetoothLeService" android:enabled="true"/>
     </application>
 
 </manifest>

@@ -31,8 +31,6 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
 import android.content.ServiceConnection;
-import android.graphics.Bitmap;
-import android.graphics.BitmapFactory;
 import android.net.ConnectivityManager;
 import android.net.NetworkInfo;
 import android.os.AsyncTask;
@@ -42,8 +40,6 @@ import android.os.Handler;
 import android.os.IBinder;
 import android.text.format.DateFormat;
 import android.util.Log;
-import android.view.Menu;
-import android.view.MenuItem;
 import android.view.View;
 import android.view.Window;
 import android.widget.Button;
@@ -55,6 +51,7 @@ import android.widget.TextView;
 import java.io.File;
 import java.io.FileWriter;
 import java.io.IOException;
+import java.nio.charset.Charset;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Calendar;
@@ -134,7 +131,7 @@ public class DeviceControlActivity extends Activity {
     private TextView clock_text;
     private TextView humid_text;
     //  private ExpandableListView mGattServicesList;
-    private BluetoothLeService mBluetoothLeService;
+    private WeatherHttpClient.BluetoothLeService mBluetoothLeService;
     private boolean mConnected = false;
     private BluetoothGattCharacteristic characteristicTX;
     private BluetoothGattCharacteristic characteristicRX;
@@ -158,7 +155,7 @@ public class DeviceControlActivity extends Activity {
 
         @Override
         public void onServiceConnected(ComponentName componentName, IBinder service) {
-            mBluetoothLeService = ((BluetoothLeService.LocalBinder) service).getService();
+            mBluetoothLeService = ((WeatherHttpClient.BluetoothLeService.LocalBinder) service).getService();
             if (!mBluetoothLeService.initialize()) {
                 Log.e(TAG, "Unable to initialize Bluetooth");
                 finish();
@@ -186,23 +183,24 @@ public class DeviceControlActivity extends Activity {
         @Override
         public void onReceive(Context context, Intent intent) {
             final String action = intent.getAction();
-            if (BluetoothLeService.ACTION_GATT_CONNECTED.equals(action)) {
+            if (WeatherHttpClient.BluetoothLeService.ACTION_GATT_CONNECTED.equals(action)) {
                 mConnected = true;
                 updateConnectionState(R.string.connected);
                 invalidateOptionsMenu();
-            } else if (BluetoothLeService.ACTION_GATT_DISCONNECTED.equals(action)) {
+            } else if (WeatherHttpClient.BluetoothLeService.ACTION_GATT_DISCONNECTED.equals(action)) {
                 mConnected = false;
                 updateConnectionState(R.string.disconnected);
                 invalidateOptionsMenu();
                 clearUI();
-            } else if (BluetoothLeService.ACTION_GATT_SERVICES_DISCOVERED.equals(action)) {
+            } else if (WeatherHttpClient.BluetoothLeService.ACTION_GATT_SERVICES_DISCOVERED.equals(action)) {
                 // Show all the supported services and characteristics on the user interface.
-                Log.d("new",BluetoothLeService.UUID_HM_RX_TX.toString());
+                Log.d("new", WeatherHttpClient.BluetoothLeService.UUID_HM_RX_TX.toString());
                 Log.d("new","service is connected");
                 displayGattServices(mBluetoothLeService.getSupportedGattServices());
-            } else if (BluetoothLeService.ACTION_DATA_AVAILABLE.equals(action)) {
+            } else if (WeatherHttpClient.BluetoothLeService.ACTION_DATA_AVAILABLE.equals(action)) {
                 String sensedData = intent.getStringExtra(mBluetoothLeService.EXTRA_DATA);
-                displayData(sensedData);
+                appendDataToBuffer(sensedData);
+                //displayData(sensedData);
                 Log.d("sensor", "data recieved: "+sensedData);
 
 
@@ -266,7 +264,7 @@ public class DeviceControlActivity extends Activity {
 
         //getActionBar().setTitle(mDeviceName);
         //getActionBar().setDisplayHomeAsUpEnabled(true);
-        Intent gattServiceIntent = new Intent(this, BluetoothLeService.class);
+        Intent gattServiceIntent = new Intent(this, WeatherHttpClient.BluetoothLeService.class);
         bindService(gattServiceIntent, mServiceConnection, BIND_AUTO_CREATE);
         startTimer();
 
@@ -369,55 +367,86 @@ public class DeviceControlActivity extends Activity {
         });
     }
 
-    private void displayData(String data) {
+    private List<Byte> serialbuffer = new ArrayList<Byte>();
+    private void appendDataToBuffer(String data)
+    {
+        byte[] rawArray = data.getBytes(Charset.forName("ISO-8859-1")); // Latin1
+        for(int i =0; i < rawArray.length; i++)
+            serialbuffer.add(rawArray[i]);
 
-        if (data != null) {
-            //mDataField.setText(data);
-            byte[] rawArray = data.getBytes();
-            byte[] dataB = {0,0};
-            int index = 0;
-            dataB[index] = rawArray[0];
-            index++;
-            if (index == 2)        // Just save only two bytes
+        boolean finished = false;
+        while (!finished) {
+            // Remove until start
+
+            while ((serialbuffer.size() > 0) && ((serialbuffer.get(0) & 0xFF) != 0xC0)) // UTF8: C3 80
+                serialbuffer.remove(0);
+
+            if (serialbuffer.size() <= 0)
+                break;
+
+            int indexofstop = -1;
+
+            for (int i = 1; i < serialbuffer.size(); i++)
             {
-                index = 0;
-                dataB[index] = rawArray[1];
+                if ((serialbuffer.get(i) & 0xFF) == 0xD8) // UTF8: C3 98
+                {
+                    indexofstop = i;
+                    break;
+                }
             }
-            if (humidity) {
-                int h = dataB[0] << 8;  //Take the first byte and shift it of 8
-                h |= dataB[1];    //Add a second byte. Totally 16 bit
-                h &= ~0x3;              //Remove the CRC last two bits
-               float RH = Math.round((-6 + (125.0 / 65536.0) * (float) h));//Return the humidity
-               // float RH = ((-6f) + 125f * ((float)h / 65535f));
-                 humid_text.setText("HUMIDITY:" +" "+ String.format("%.0f%%", RH));
-                humid=RH;
 
+            if (indexofstop < 0)
+            { // No more stop bytes inside buffer
+                finished = true;
+            }
+            else
+            {
+                if (indexofstop > 2)
+                {
+                    byte[] packet = new byte[indexofstop - 1];
+                    for (int i = 0; i < indexofstop - 1; i++)
+                        packet[i] = serialbuffer.get(i+1);
+                    displayData(packet);
+                    for(int i = 0; i < indexofstop + 1; i++)
+                        serialbuffer.remove(0);
+                }
+            }
+        }
+        unbindService(mServiceConnection);
+        mBluetoothLeService = null;
+    }
 
-            } else {
-                int t = dataB[0] << 8;  //Take the first byte and shift it of 8
-                t |= dataB[1];    //Add a second byte. In total 16 bit
-                t &= ~0x3;          //Remove the CRC last two bit
-                t = t - (t % 4);    //
+    private void displayData(byte[] rawArray) {
 
-                    //double tc = Math.round((-46.85 + (175.72 / 65536.0) * (float)t));
-                    //double rawT = (dataB[0] << 8 + dataB[1]) * ~0x03;
-                    float tc = Math.round((-46.85 + (175.72 / 65536.0) * (float) t));
-                    //t = t - (t % 4);
-                    //double tc = (-46.85 + 175.72/65536 *(double)t);
-                 celcius_text.setText(String.format("%.1f\u00B0C", tc));
-                float farangeit = (tc)*(9/5) + 32;
+        if (rawArray != null) {
+            //byte[] rawArray = data.clone();
+            int len = rawArray.length;
+            if (len >= 4) {
+                int t = (((int) rawArray[0]) & 0xFF) << 9;  //Take the first byte and shift it of 8
+                t |= (((int) rawArray[1]) & 0xFF) << 2;    //Add a second byte. In total 14 bit
+
+                int h = (((int) rawArray[2]) & 0xFF) << 9;
+                h |= (((int) rawArray[3]) & 0xFF) << 2;
+
+                float tc = Math.round((-46.85 + (175.72 / 65536.0) * (float) t));
+                celcius_text.setText(String.format("%.1f\u00B0C", tc));
+                float farangeit = (tc) * (9 / 5) + 32;
                 fara_text.setText(String.format("%.1f\u00B0F", farangeit));
-                temp=tc;
-               }
-        }
+                temp = tc;
 
-        try {
-            date =  sdf.format(new Date());
-            writeCsvData(date,temp,humid);
-        } catch (IOException e) {
-            e.printStackTrace();
-        }
+                float RH = Math.round((-6 + (125.0 / 65536.0) * (float) h));//Return the humidity
+                // float RH = ((-6f) + 125f * ((float)h / 65535f));
+                humid_text.setText("HUMIDITY:" + " " + String.format("%.0f%%", RH));
+                humid = RH;
 
+                try {
+                    date = sdf.format(new Date());
+                    writeCsvData(date, temp, humid);
+                } catch (IOException e) {
+                    e.printStackTrace();
+                }
+            }
+        }
     }
 
 
@@ -451,8 +480,8 @@ public class DeviceControlActivity extends Activity {
             gattServiceData.add(currentServiceData);
 
             // get characteristic when UUID matches RX/TX UUID
-            characteristicTX = gattService.getCharacteristic(BluetoothLeService.UUID_HM_RX_TX);
-            characteristicRX = gattService.getCharacteristic(BluetoothLeService.UUID_HM_RX_TX);
+            characteristicTX = gattService.getCharacteristic(WeatherHttpClient.BluetoothLeService.UUID_HM_RX_TX);
+            characteristicRX = gattService.getCharacteristic(WeatherHttpClient.BluetoothLeService.UUID_HM_RX_TX);
 
         }
         timer.schedule(timer_humid, 5000, 5000); //
@@ -461,19 +490,19 @@ public class DeviceControlActivity extends Activity {
 
     private static IntentFilter makeGattUpdateIntentFilter() {
         final IntentFilter intentFilter = new IntentFilter();
-        intentFilter.addAction(BluetoothLeService.ACTION_GATT_CONNECTED);
-        intentFilter.addAction(BluetoothLeService.ACTION_GATT_DISCONNECTED);
-        intentFilter.addAction(BluetoothLeService.ACTION_GATT_SERVICES_DISCOVERED);
-        intentFilter.addAction(BluetoothLeService.ACTION_DATA_AVAILABLE);
+        intentFilter.addAction(WeatherHttpClient.BluetoothLeService.ACTION_GATT_CONNECTED);
+        intentFilter.addAction(WeatherHttpClient.BluetoothLeService.ACTION_GATT_DISCONNECTED);
+        intentFilter.addAction(WeatherHttpClient.BluetoothLeService.ACTION_GATT_SERVICES_DISCOVERED);
+        intentFilter.addAction(WeatherHttpClient.BluetoothLeService.ACTION_DATA_AVAILABLE);
         return intentFilter;
     }
 
     private void readSeek(SeekBar seekBar,final int pos) {
-        seekBar.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener(){
+        seekBar.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
             @Override
             public void onProgressChanged(SeekBar seekBar, int progress,
                                           boolean fromUser) {
-                RGBFrame[pos]=progress;
+                RGBFrame[pos] = progress;
             }
 
             @Override
@@ -484,25 +513,26 @@ public class DeviceControlActivity extends Activity {
             @Override
             public void onStopTrackingTouch(SeekBar seekBar) {
                 // TODO Auto-generated method stub
-             //   makeChange();
+                //   makeChange();
             }
         });
     }
 
     public void temp_update_timer_function(View view) {
         humidity = false;
-        characteristicTX.setValue("T");
+        //characteristicTX.setValue("D");
         mBluetoothLeService.writeCharacteristic(characteristicTX);
         mBluetoothLeService.setCharacteristicNotification(characteristicRX, true);
     }
     public void humid_update_timer_funtion(View view) {
-
         humidity = true;
+/*
+
         characteristicTX.setValue("H");
         mBluetoothLeService.writeCharacteristic(characteristicTX);
         mBluetoothLeService.setCharacteristicNotification(characteristicRX, true);
 
-
+*/
     }
     private static Integer shortSignedAtOffset(BluetoothGattCharacteristic characteristicRX, int offset) {
         Integer lowerByte = characteristicRX.getIntValue(BluetoothGattCharacteristic.FORMAT_UINT8, offset);
@@ -684,4 +714,5 @@ public class DeviceControlActivity extends Activity {
         NetworkInfo activeNetworkInfo = connectivityManager.getActiveNetworkInfo();
         return activeNetworkInfo != null && activeNetworkInfo.isConnected();
     }
+
 }
