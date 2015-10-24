@@ -412,8 +412,7 @@ public class DeviceControlActivity extends Activity {
                 }
             }
         }
-        unbindService(mServiceConnection);
-        mBluetoothLeService = null;
+
     }
 
     private void displayData(byte[] rawArray) {
@@ -447,6 +446,8 @@ public class DeviceControlActivity extends Activity {
                 }
             }
         }
+        //unbindService(mServiceConnection);
+        //mBluetoothLeService = null;
     }
 
 
@@ -484,8 +485,8 @@ public class DeviceControlActivity extends Activity {
             characteristicRX = gattService.getCharacteristic(WeatherHttpClient.BluetoothLeService.UUID_HM_RX_TX);
 
         }
-        timer.schedule(timer_humid, 5000, 5000); //
-        timer2.schedule(timer_temp, 1000, 5000); //
+        timer.schedule(timer_humid, 5000, 15000); //
+        timer2.schedule(timer_temp, 1000, 15000); //
     }
 
     private static IntentFilter makeGattUpdateIntentFilter() {
@@ -520,7 +521,7 @@ public class DeviceControlActivity extends Activity {
 
     public void temp_update_timer_function(View view) {
         humidity = false;
-        //characteristicTX.setValue("D");
+        characteristicTX.setValue("D");
         mBluetoothLeService.writeCharacteristic(characteristicTX);
         mBluetoothLeService.setCharacteristicNotification(characteristicRX, true);
     }
@@ -663,7 +664,7 @@ public class DeviceControlActivity extends Activity {
                     publishProgress(weather);
                     //return weather;
                     try {
-                        Thread.sleep(5000);
+                        Thread.sleep(1000);
                     } catch (InterruptedException e) {
                         e.printStackTrace();
                     }
